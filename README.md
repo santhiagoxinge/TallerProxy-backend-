@@ -44,7 +44,7 @@ Set `PORT` to use another port.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `8080` | HTTP port (Railway injects it) |
+| `PORT` | `8080` | HTTP port (injected by the hosting platform) |
 | `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated origins allowed to call `/api/**` |
 | `PAYMENT_FAILURE_RATE` | `0.10` | Share of payment calls that fail intentionally |
 
