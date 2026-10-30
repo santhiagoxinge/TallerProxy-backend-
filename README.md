@@ -80,11 +80,16 @@ Errors: `400` invalid parameters, `404` unknown service / operation / resource, 
 | `GET /api/metrics/logs?service=&status=&from=&to=&page=&size=` | Filtered logs, newest first, paginated. `status` is `SUCCESS` or `ERROR`; `from` / `to` are ISO-8601 instants (`2026-10-30T14:00:00Z`) |
 | `POST /api/metrics/simulate-load` | Generates 50 random calls to populate the logs |
 
-## Deploy (Railway)
+## Deploy (Render)
 
-1. Create a Railway project from this repository. The included `Dockerfile` is detected automatically.
-2. Set `CORS_ALLOWED_ORIGINS` to the frontend URL (optional, defaults to any origin).
-3. Generate a public domain under **Settings → Networking**.
+Live API: https://taller-proxy-backend.onrender.com
+
+1. Create a **Web Service** on Render from this repository, with runtime **Docker** (the included `Dockerfile` is used).
+2. Use the free plan and set the health check path to `/`. Render injects `PORT` automatically.
+3. Optionally set `CORS_ALLOWED_ORIGINS` to the frontend URL (defaults to any origin).
+
+On the free plan the service sleeps after inactivity, so the first request can take about a minute.
+Logs are stored in memory and reset on every restart or redeploy.
 
 ## Project structure
 
