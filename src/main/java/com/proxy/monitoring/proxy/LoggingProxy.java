@@ -45,16 +45,25 @@ public class LoggingProxy<T> implements MicroserviceProxy<T> {
         try {
             T result = delegate.execute(operation, params);
             long duration = elapsedMs(start);
-            store.add(new LogEntry(requestId, serviceId, operation, duration, CallStatus.SUCCESS,
+            record(new LogEntry(requestId, serviceId, operation, duration, CallStatus.SUCCESS,
                     timestamp, Arrays.asList(params), result, null));
             log.info("[{}] SUCCESS {}.{} in {}ms", requestId, serviceId, operation, duration);
             return result;
         } catch (RuntimeException ex) {
             long duration = elapsedMs(start);
-            store.add(new LogEntry(requestId, serviceId, operation, duration, CallStatus.ERROR,
+            record(new LogEntry(requestId, serviceId, operation, duration, CallStatus.ERROR,
                     timestamp, Arrays.asList(params), null, summarize(ex)));
             log.warn("[{}] ERROR {}.{} in {}ms: {}", requestId, serviceId, operation, duration, ex.getMessage());
             throw ex;
+        }
+    }
+
+    /** Auditing must never break the call being audited, so storage failures are only reported. */
+    private void record(LogEntry entry) {
+        try {
+            store.add(entry);
+        } catch (RuntimeException ex) {
+            log.error("[{}] Could not store audit log: {}", entry.requestId(), ex.getMessage());
         }
     }
 

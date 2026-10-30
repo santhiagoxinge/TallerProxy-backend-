@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,10 +25,11 @@ public class ServiceRegistry {
 
     private final Map<String, MicroserviceProxy<Map<String, Object>>> services = new LinkedHashMap<>();
 
-    public ServiceRegistry(LogStore store, @Value("${app.payment.failure-rate:0.10}") double paymentFailureRate) {
-        services.put(INVENTORY, new LoggingProxy<>(INVENTORY, new InventoryService(), store));
-        services.put(ORDERS, new LoggingProxy<>(ORDERS, new OrderService(), store));
-        services.put(PAYMENTS, new LoggingProxy<>(PAYMENTS, new PaymentService(paymentFailureRate), store));
+    public ServiceRegistry(LogStore store, JdbcClient jdbc,
+                           @Value("${app.payment.failure-rate:0.10}") double paymentFailureRate) {
+        services.put(INVENTORY, new LoggingProxy<>(INVENTORY, new InventoryService(jdbc), store));
+        services.put(ORDERS, new LoggingProxy<>(ORDERS, new OrderService(jdbc), store));
+        services.put(PAYMENTS, new LoggingProxy<>(PAYMENTS, new PaymentService(jdbc, paymentFailureRate), store));
     }
 
     public MicroserviceProxy<Map<String, Object>> get(String serviceId) {

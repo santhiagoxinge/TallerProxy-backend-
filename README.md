@@ -8,9 +8,9 @@ observability dashboard.
 ## Proxy pattern
 
 ```
-Client ─▶ ServiceController ─▶ LoggingProxy<T> ─▶ InventoryService | OrderService | PaymentService
-                                    │
-                                    └─▶ LogStore (requestId, serviceId, operation, durationMs, status, timestamp)
+Client ─▶ Controller ─▶ LoggingProxy<T> ─▶ InventoryService | OrderService | PaymentService ─▶ PostgreSQL
+                              │                                                               (products, orders, payments)
+                              └─▶ LogStore ─▶ PostgreSQL (call_logs)
 ```
 
 | Piece | Role |
@@ -19,7 +19,7 @@ Client ─▶ ServiceController ─▶ LoggingProxy<T> ─▶ InventoryService |
 | `InventoryService`, `OrderService`, `PaymentService` | Real services with implemented operations |
 | `LoggingProxy<T>` | Wraps any service. Logs the start, then duration and result; on failure logs the error with a summarized stack trace and rethrows |
 | `ServiceRegistry` | Exposes only the proxied services, so callers can never reach a raw service |
-| `LogStore` | Bounded in-memory log storage (last 5000 entries) and metric aggregation |
+| `LogStore` / `JdbcLogStore` | Audit trail persisted in PostgreSQL (newest 5000 rows kept) and metric aggregation. `InMemoryLogStore` exists only for unit tests |
 
 Every log entry contains `requestId` (UUID), `serviceId`, `operation`, `durationMs`, `status` (`SUCCESS` / `ERROR`),
 `timestamp`, the input `params`, the `response` (or the summarized `error`).
@@ -28,14 +28,20 @@ Every log entry contains `requestId` (UUID), `serviceId`, `operation`, `duration
 
 ## Stack
 
-- Java 21, Spring Boot 4.1
+- Java 21, Spring Boot 4.1 (Spring JDBC)
+- PostgreSQL on Supabase
 - Maven (wrapper included)
 
 ## Run locally
 
+Create the database first with [`db/schema.sql`](db/schema.sql), then:
+
 ```bash
+export DATABASE_URL="jdbc:postgresql://<host>:5432/postgres?sslmode=require"
+export DATABASE_USER="<user>"
+export DATABASE_PASSWORD="<password>"
 ./mvnw spring-boot:run          # http://localhost:8080
-./mvnw test                     # unit tests
+./mvnw test                     # unit tests (no database needed)
 ```
 
 Set `PORT` to use another port.
@@ -44,6 +50,10 @@ Set `PORT` to use another port.
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `DATABASE_URL` | — (required) | JDBC URL of the PostgreSQL database |
+| `DATABASE_USER` | — (required) | Database user (limited to the `proxy_workshop` schema) |
+| `DATABASE_PASSWORD` | — (required) | Database password |
+| `DB_POOL_SIZE` | `5` | Maximum JDBC connections |
 | `PORT` | `8080` | HTTP port (injected by the hosting platform) |
 | `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated origins allowed to call `/api/**` |
 | `PAYMENT_FAILURE_RATE` | `0.10` | Share of payment calls that fail intentionally |
@@ -89,7 +99,8 @@ Live API: https://taller-proxy-backend.onrender.com
 3. Optionally set `CORS_ALLOWED_ORIGINS` to the frontend URL (defaults to any origin).
 
 On the free plan the service sleeps after inactivity, so the first request can take about a minute.
-Logs are stored in memory and reset on every restart or redeploy.
+Set `DATABASE_URL`, `DATABASE_USER` and `DATABASE_PASSWORD` as environment variables (use the Supabase session
+pooler host, since Render has no IPv6 egress). Data and logs persist across restarts and redeploys.
 
 ## Project structure
 
@@ -98,8 +109,10 @@ src/main/java/com/proxy/monitoring
 ├── proxy/        MicroserviceProxy, LoggingProxy
 ├── service/      Inventory, Order, Payment services, ServiceRegistry, LoadSimulator
 ├── controller/   ServiceController, MetricsController, HealthController
-├── store/        LogStore
+├── store/        LogStore, JdbcLogStore, InMemoryLogStore
 ├── model/        LogEntry, MetricsSummary, ServiceSummary, PagedLogs, CallStatus
 ├── exception/    Domain exceptions and ApiExceptionHandler
 └── config/       CorsConfig
+
+db/schema.sql     PostgreSQL schema, seed data and security setup
 ```

@@ -4,6 +4,7 @@ import com.proxy.monitoring.exception.ServiceFailureException;
 import com.proxy.monitoring.model.CallStatus;
 import com.proxy.monitoring.model.LogEntry;
 import com.proxy.monitoring.model.PagedLogs;
+import com.proxy.monitoring.store.InMemoryLogStore;
 import com.proxy.monitoring.store.LogStore;
 
 import java.util.UUID;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LoggingProxyTest {
 
-    private final LogStore store = new LogStore();
+    private final LogStore store = new InMemoryLogStore();
 
     @Test
     void logsSuccessfulCallWithRequiredFields() {
