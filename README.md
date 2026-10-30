@@ -1,0 +1,100 @@
+# Microservices Monitoring — Backend
+
+Spring Boot backend for the **Proxy pattern workshop**: three microservices (Inventory, Orders, Payments)
+sit behind a **logging proxy** that intercepts every call and records usage metrics, response times and errors.
+The [frontend](https://github.com/santhiagoxinge/TallerProxy-Frontend) renders that data as a real-time
+observability dashboard.
+
+## Proxy pattern
+
+```
+Client ─▶ ServiceController ─▶ LoggingProxy<T> ─▶ InventoryService | OrderService | PaymentService
+                                    │
+                                    └─▶ LogStore (requestId, serviceId, operation, durationMs, status, timestamp)
+```
+
+| Piece | Role |
+| --- | --- |
+| `MicroserviceProxy<T>` | Generic interface: `T execute(String operation, Object... params)` |
+| `InventoryService`, `OrderService`, `PaymentService` | Real services with implemented operations |
+| `LoggingProxy<T>` | Wraps any service. Logs the start, then duration and result; on failure logs the error with a summarized stack trace and rethrows |
+| `ServiceRegistry` | Exposes only the proxied services, so callers can never reach a raw service |
+| `LogStore` | Bounded in-memory log storage (last 5000 entries) and metric aggregation |
+
+Every log entry contains `requestId` (UUID), `serviceId`, `operation`, `durationMs`, `status` (`SUCCESS` / `ERROR`),
+`timestamp`, the input `params`, the `response` (or the summarized `error`).
+
+`PaymentService` fails on purpose for 10% of its calls (`PAYMENT_FAILURE_RATE`).
+
+## Stack
+
+- Java 21, Spring Boot 4.1
+- Maven (wrapper included)
+
+## Run locally
+
+```bash
+./mvnw spring-boot:run          # http://localhost:8080
+./mvnw test                     # unit tests
+```
+
+Set `PORT` to use another port.
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP port (Railway injects it) |
+| `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated origins allowed to call `/api/**` |
+| `PAYMENT_FAILURE_RATE` | `0.10` | Share of payment calls that fail intentionally |
+
+## API
+
+### Services (all go through the logging proxy)
+
+`POST /api/services/{service}/{operation}` with an optional JSON body.
+
+| Service | Operations | Body |
+| --- | --- | --- |
+| `inventory` | `listProducts` | — |
+| | `checkStock` | `{"sku": "SKU-MOUSE"}` |
+| | `reserve`, `restock` | `{"sku": "SKU-MOUSE", "quantity": 3}` |
+| `orders` | `create` | `{"customerId": "CUS-1", "sku": "SKU-MOUSE", "quantity": 2, "unitPrice": 25.5}` |
+| | `get`, `cancel` | `{"orderId": "ORD-1001"}` |
+| | `list` | — |
+| `payments` | `charge` | `{"orderId": "ORD-1001", "amount": 51}` |
+| | `refund`, `status` | `{"paymentId": "PAY-1A2B3C4D"}` |
+
+```bash
+curl -X POST http://localhost:8080/api/services/inventory/checkStock \
+  -H "Content-Type: application/json" -d '{"sku":"SKU-MOUSE"}'
+```
+
+Errors: `400` invalid parameters, `404` unknown service / operation / resource, `503` simulated payment failure.
+
+### Metrics
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/metrics/summary` | Total calls, error rate and average response time, overall and per service |
+| `GET /api/metrics/logs?service=&status=&from=&to=&page=&size=` | Filtered logs, newest first, paginated. `status` is `SUCCESS` or `ERROR`; `from` / `to` are ISO-8601 instants (`2026-10-30T14:00:00Z`) |
+| `POST /api/metrics/simulate-load` | Generates 50 random calls to populate the logs |
+
+## Deploy (Railway)
+
+1. Create a Railway project from this repository. The included `Dockerfile` is detected automatically.
+2. Set `CORS_ALLOWED_ORIGINS` to the frontend URL (optional, defaults to any origin).
+3. Generate a public domain under **Settings → Networking**.
+
+## Project structure
+
+```
+src/main/java/com/proxy/monitoring
+├── proxy/        MicroserviceProxy, LoggingProxy
+├── service/      Inventory, Order, Payment services, ServiceRegistry, LoadSimulator
+├── controller/   ServiceController, MetricsController, HealthController
+├── store/        LogStore
+├── model/        LogEntry, MetricsSummary, ServiceSummary, PagedLogs, CallStatus
+├── exception/    Domain exceptions and ApiExceptionHandler
+└── config/       CorsConfig
+```
